@@ -164,7 +164,7 @@ st.success(f"Dataset loaded from URL. Maximum number of records: {max_records}")
 # Main UI – record slider and fields
 # =============================
 sel_recno = st.slider("Recorde: ", min_value=1, max_value=max_records, value=1, step=1)
-st.markdown(f"**Record:** #{sel_recno}")
+st.markdown(f"**Recorde:** #{sel_recno}")
 
 row = df_records.loc[df_records["RecordNo"] == sel_recno].iloc[0]
 seq = row.get("Sequence", "")
@@ -189,9 +189,9 @@ with col4:
 # A) Ask Chat GPT Now – build required prompt and send
 # =============================
 st.markdown("---")
-st.subheader("Dataset-wide Similarity (ChatGPT)")
+st.subheader("Dataset-wide Similarity (Chat GPT)")
 
-button = st.button("Compare Now")
+button = st.button("Ask Chat GPT Now")
 
 if button:
     if not OPENAI_API_KEY:
@@ -218,7 +218,7 @@ What are the entities to be computed?
 Give a compleste Comaparison Analysis to at least top 2 similar mRNA.
 """
         
-        with st.status("Contacting ChatGPT…", expanded=False):
+        with st.status("Contacting Chat GPT…", expanded=False):
             try:
                 from openai import OpenAI
                 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -226,24 +226,24 @@ Give a compleste Comaparison Analysis to at least top 2 similar mRNA.
                     model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": (
-                            "You are a rigorous bioinformatics assistant. Return well-structured HTML only (no external CSS/JS)."
+                            "You are a rigorous bioinformatics assistant. Return PLAIN TEXT or MARKDOWN only. Do NOT include HTML tags or DOCTYPE. Structure with headings, lists, and code blocks if helpful."
                         )},
                         {"role": "user", "content": prompt_text},
                     ],
                     temperature=0.1,
                 )
-                html_out = resp.choices[0].message.content if resp.choices else "(No response)"
-                
-                # B) Print formatted HTML
+                resp_text = resp.choices[0].message.content if resp.choices else "(No response)"
+
                 st.markdown("---")
-                st.subheader("ChatGPT Response")
-                st.markdown(html_out, unsafe_allow_html=True)
+                st.subheader("Chat GPT Response")
+                st.markdown(resp_text)
             except Exception as e:
                 st.error(f"OpenAI request failed: {e}")
 
 # C) Removed the previous preview table per request.
 
 st.caption("Dataset is loaded directly from the miRBase URL. No local data file is needed.")
+
 
 
 
