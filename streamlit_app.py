@@ -1,9 +1,6 @@
-import streamlit as st
 from openai import OpenAI
-import os
 import re
-from textwrap import shorten
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
@@ -19,7 +16,6 @@ st.title("mRNA Complement Analyser")
 # Secrets and constants
 # =============================
 OPENAI_API_KEY = st.secrets.get("openai", {}).get("secret_key", "")
-
 MIRBASE_URL = "https://www.mirbase.org/download/miRNA.dat"
 
 # =============================
@@ -122,6 +118,7 @@ def build_dataframe(entries: List[Dict[str, object]]) -> pd.DataFrame:
 
 
 def complement_mrna(seq: str) -> str:
+    # mRNA complement (not reverse-complement): A<->U, C<->G; tolerate T as U.
     comp_map = str.maketrans({
         "a": "u", "u": "a", "g": "c", "c": "g",
         "t": "a",
@@ -171,12 +168,13 @@ st.markdown(f"**Recorde:** #{sel_recno}")
 
 row = df_records.loc[df_records["RecordNo"] == sel_recno].iloc[0]
 seq = row.get("Sequence", "")
-comp = complement_mrna(seq)
+comp_seq = complement_mrna(seq)
 
 st.text_area("mRNA sequence (from dataset)", value=seq, height=140, disabled=True)
 st.markdown("**Complement mRNA:**")
-user_comp = st.text_area("", value=comp, height=140, key="comp_edit", disabled=False)
+user_comp = st.text_area("", value=comp_seq, height=140, key="comp_edit", disabled=False)
 
+# Quick local stats (kept for convenience)
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("Length (mRNA)", f"{len(seq)} nt")
@@ -188,54 +186,65 @@ with col4:
     st.metric("Similarity (SeqMatcher)", f"{similar_ratio(seq, user_comp)}%")
 
 # =============================
-# ChatGPT prompt
+# A) Ask Chat GPT Now – build required prompt and send
 # =============================
 st.markdown("---")
 st.subheader("Dataset-wide Similarity (ChatGPT)")
 
-prompt_template = f"""
-You are a bioinformatics assistant. I will provide a single mRNA sequence and its complementary mRNA (not reverse-complement).
-Using the official miRBase dataset available at {MIRBASE_URL}, please:
-1) Search for the closest matches to the given mRNA across the dataset.
-2) Compute and report a 4-step comparison for the top match(es).
-3) Also analyse the complementary mRNA if relevant.
-Return a clean, well-structured HTML summary.
+button = st.button("Ask Chat GPT Now")
 
-mRNA (from dataset record #{sel_recno}):\n{seq}\n\nComplement mRNA (editable):\n{user_comp}
-"""
-
-MODEL_NAME = "gpt-4o-mini"
-ask = st.button("Ask ChatGPT now")
-
-if ask:
+if button:
     if not OPENAI_API_KEY:
         st.error("OpenAI API key is missing in secrets.")
     else:
+        # Build the EXACT prompt shape requested by the user
+        prompt_text = f"""
+Data Source = "{MIRBASE_URL}"
+Complement mRNA = {user_comp}
+compare the above with entire data base and find the Similarities and highlight the reord numers /names.
+The comparison must include:
+What are the entities to be computed?
+1. Basic checks
+   • Lengths, %GC, presence of AUG start and proper stop (UAA/UAG/UGA).
+2. Similarity
+   • Global alignment (best for full-length mRNAs): percent identity, gaps.
+   • Edit distance (minimum number of changes).
+3. Change list (“what to fix”)
+   • A position-by-position list of substitutions, insertions, deletions with 1-based coordinates (e.g., c.125A>G, c.300_301insU, c.451delC).
+4. Codon-aware impact (optional but recommended)
+   • Translate both and report synonymous / missense / nonsense / frameshift changes with protein effects (e.g., p.Glu42Lys, p.Trp85Ter).
+   • Flag any indels not divisible by 3 (frameshifts).
+------------------------------------------------------------
+Give a compleste Comaparison Analysis to at least top 2 similar mRNA.
+"""
+        
         with st.status("Contacting ChatGPT…", expanded=False):
             try:
                 from openai import OpenAI
                 client = OpenAI(api_key=OPENAI_API_KEY)
                 resp = client.chat.completions.create(
-                    model=MODEL_NAME,
+                    model="gpt-4o-mini",
                     messages=[
-                        {"role": "system", "content": "You are a concise, precise bioinformatics assistant."},
-                        {"role": "user", "content": prompt_template},
+                        {"role": "system", "content": (
+                            "You are a rigorous bioinformatics assistant. Return well-structured HTML only (no external CSS/JS)."
+                        )},
+                        {"role": "user", "content": prompt_text},
                     ],
-                    temperature=0.2,
+                    temperature=0.1,
                 )
                 html_out = resp.choices[0].message.content if resp.choices else "(No response)"
+                
+                # B) Print formatted HTML
                 st.markdown("---")
                 st.subheader("ChatGPT Response")
                 st.markdown(html_out, unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"OpenAI request failed: {e}")
 
-st.markdown("---")
-with st.expander("Preview first 10 records", expanded=False):
-    preview = df_records[["RecordNo", "ID", "PrimaryAccession", "Length"]].head(10)
-    st.dataframe(preview, use_container_width=True)
+# C) Removed the previous preview table per request.
 
 st.caption("Dataset is loaded directly from the miRBase URL. No local data file is needed.")
+
 
 
 
