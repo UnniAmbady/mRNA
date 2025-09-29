@@ -163,8 +163,8 @@ st.success(f"Dataset loaded from URL. Maximum number of records: {max_records}")
 # =============================
 # Main UI – record slider and fields
 # =============================
-sel_recno = st.slider("Recorde: ", min_value=1, max_value=max_records, value=1, step=1)
-st.markdown(f"**Recorde:** #{sel_recno}")
+sel_recno = st.slider("Record: ", min_value=1, max_value=max_records, value=1, step=1)
+st.markdown(f"**Record:** #{sel_recno}")
 
 row = df_records.loc[df_records["RecordNo"] == sel_recno].iloc[0]
 seq = row.get("Sequence", "")
@@ -191,7 +191,7 @@ with col4:
 st.markdown("---")
 st.subheader("Dataset-wide Similarity (Chat GPT)")
 
-button = st.button("Ask Chat GPT Now")
+button = st.button("Compare Now")
 
 if button:
     if not OPENAI_API_KEY:
